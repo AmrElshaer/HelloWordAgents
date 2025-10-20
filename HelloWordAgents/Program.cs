@@ -14,12 +14,14 @@ IChatClient chatClient =
         .AsBuilder()
         .UseFunctionInvocation()
         .Build();
+// dotnet tool install -g AmrElshaer.SampleMcpServer --version 0.1.0-beta
+// McpServerProject <ToolCommandName>...</ToolCommandName>
+
 var mcpClient = await McpClient.CreateAsync(
     new StdioClientTransport(new()
     {
-     
-        Command = "dotnet run",
-        Arguments = ["--project", "C:\\projects\\personal_projects\\McpServerProject\\McpServerProject\\McpServerProject.csproj"],
+
+        Command = "McpServerProject",
         Name = "Mcp server sample",
         EnvironmentVariables = new Dictionary<string, string>
     {
