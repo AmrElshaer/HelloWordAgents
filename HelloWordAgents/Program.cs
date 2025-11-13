@@ -2,9 +2,7 @@
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using ModelContextProtocol.Client;
-using OpenAI;
-using OpenAI.Chat;
-using System.ClientModel;
+using OllamaSharp;
 var apiKey = Environment.GetEnvironmentVariable("GITHUB_API_KEY");
 if (string.IsNullOrEmpty(apiKey))
 {
@@ -28,15 +26,54 @@ var mcpClient = await McpClient.CreateAsync(
 Console.WriteLine("Available tools:");
 IList<McpClientTool> tools = await mcpClient.ListToolsAsync();
 // Initialize agent
-var agent = new ChatClient(
-        "gpt-4o-mini",
-        new ApiKeyCredential(apiKey),
-        new OpenAIClientOptions { Endpoint = new Uri("https://models.github.ai/inference") })
-   
-    .AsIChatClient()
-    .CreateAIAgent(tools: [..tools.Cast<AITool>()])
-    .AsBuilder()
-    .Build();
+
+// 🔹 Add your text prompt
+var instructions = """
+
+
+        You are a professional content strategist and visual analyst.
+
+        You are given several related images. Your task is to:
+        1. Carefully analyze each image for key details, themes, colors, objects, text, diagrams, or visual messages.
+        2. Identify the common narrative or idea that connects all these images.
+        3. Write a powerful and engaging post that:
+           - Clearly explains what the images represent.
+           - Highlights the insights, lessons, or story they convey.
+           - Uses a professional but inspiring tone suitable for LinkedIn or a tech blog.
+           - Includes a concise summary or key takeaway at the end.
+        4. If the images contain technical or architectural diagrams, provide clear interpretations in plain language.
+        5. The post should feel natural, insightful, and add value to professionals in the field.
+        6. Images not give in order so consider this the post more organized and meanfull
+        7. Commit the blog post as a markdown to AmrElshaer/HelloWordAgents with commit message: Blog post published {DateTime.Now:yyyy-MM-dd HH:mm:ss}
+
+        Output format:
+        ---
+        **Title:** [A short, catchy title]
+        **Post:**
+        [Your detailed, well-written post with clear flow and insights]
+        ---
+       
+    """;
+IChatClient client = new OllamaApiClient(new Uri("http://localhost:11434"), "phi4-mini:latest");
+ChatClientAgent agent = new(client,
+     new ChatClientAgentOptions
+     {
+         Name = "Writer Blogs from images",
+         Instructions = instructions,
+         ChatOptions = new ChatOptions
+         {
+             Tools = [
+               ..tools.Cast<AITool>()
+            ],
+         }
+     }
+
+
+    );
+
+
+var result = await agent.RunAsync("describe solid principles");
+Console.WriteLine(result.Text);
 
 // 🔹 Load all image files from "images" folder
 string imageFolder = Path.Combine(Directory.GetCurrentDirectory(), "images");
@@ -68,37 +105,11 @@ var contents = imageFiles.Select(file =>
     return new DataContent(bytes, mimeType);
 }).ToList<AIContent>();
 
-// 🔹 Add your text prompt
-contents.Insert(0, new TextContent("""
 
-
-        You are a professional content strategist and visual analyst.
-
-        You are given several related images. Your task is to:
-        1. Carefully analyze each image for key details, themes, colors, objects, text, diagrams, or visual messages.
-        2. Identify the common narrative or idea that connects all these images.
-        3. Write a powerful and engaging post that:
-           - Clearly explains what the images represent.
-           - Highlights the insights, lessons, or story they convey.
-           - Uses a professional but inspiring tone suitable for LinkedIn or a tech blog.
-           - Includes a concise summary or key takeaway at the end.
-        4. If the images contain technical or architectural diagrams, provide clear interpretations in plain language.
-        5. The post should feel natural, insightful, and add value to professionals in the field.
-        6. Images not give in order so consider this the post more organized and meanfull
-        7. Commit the blog post as a markdown to AmrElshaer/HelloWordAgents with commit message: Blog post published {DateTime.Now:yyyy-MM-dd HH:mm:ss}
-
-        Output format:
-        ---
-        **Title:** [A short, catchy title]
-        **Post:**
-        [Your detailed, well-written post with clear flow and insights]
-        ---
-       
-    """));
 
 
 // 🔹 Build message
-var message = new Microsoft.Extensions.AI.ChatMessage(ChatRole.User, contents);
+var message = new ChatMessage(ChatRole.User, contents);
 
 // 🔹 Run the agent
 var response = await agent.RunAsync(message);
