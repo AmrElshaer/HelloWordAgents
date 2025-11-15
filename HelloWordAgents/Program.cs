@@ -54,7 +54,7 @@ var instructions = """
         ---
        
     """;
-IChatClient client = new OllamaApiClient(new Uri("http://localhost:11434"), "phi4-mini:latest");
+IChatClient client = new OllamaApiClient(new Uri("http://localhost:11434"), "llama3.1:latest");
 ChatClientAgent agent = new(client,
      new ChatClientAgentOptions
      {
@@ -72,7 +72,7 @@ ChatClientAgent agent = new(client,
     );
 
 
-var result = await agent.RunAsync("describe solid principles");
+var result = await agent.RunAsync("describe solid principles",cancellationToken:CancellationToken.None);
 Console.WriteLine(result.Text);
 
 // 🔹 Load all image files from "images" folder
