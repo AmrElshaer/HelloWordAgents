@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "HelloWordAgents": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "AZURE_DEVOPS_PAT": ""
+      }
+    }
+  }
+}

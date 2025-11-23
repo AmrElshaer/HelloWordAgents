@@ -1,55 +1,62 @@
-﻿using Microsoft.Agents.AI.Workflows;
+﻿using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
-using System.ComponentModel;
-using Microsoft.Agents.AI;
-using OpenAI;
-using OpenAI.Chat;
-using System.ClientModel;
-var apiKey=Environment.GetEnvironmentVariable("GITHUB_API_KEY");
-IChatClient chatClient =
-    new ChatClient(
-            "gpt-4o-mini",
-            new ApiKeyCredential(apiKey!),
-            new OpenAIClientOptions { Endpoint = new Uri("https://models.github.ai/inference") })
-        .AsIChatClient();
+using ModelContextProtocol.Client;
+using OllamaSharp;
 
-AIAgent writer = new ChatClientAgent(
-    chatClient,
-    new ChatClientAgentOptions
+var azureDevOpsApiKey = Environment.GetEnvironmentVariable("AZURE_DEVOPS_PAT");
+var mcpClient = await McpClient.CreateAsync(
+    new StdioClientTransport(new()
     {
-        Name = "Writer",
-        Instructions = "Write stories that are engaging and creative.",
-        ChatOptions = new ChatOptions
-        {
-            Tools = [
-                AIFunctionFactory.Create(GetAuthor),
-                AIFunctionFactory.Create(FormatStory)
-            ],
-        }
-    });
-AIAgent editor = new ChatClientAgent(
-    chatClient,
-    new ChatClientAgentOptions
-    {
-        Name = "Editor",
-        Instructions = "Make the story more engaging, fix grammar, and enhance the plot."
-    });
+        Name = "AzureDevOps",
+        Command = "npx",
+        Arguments = ["-y", "@tiberriver256/mcp-server-azure-devops"],
+        EnvironmentVariables = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    { "AZURE_DEVOPS_ORG_URL", "https://dev.azure.com/SaudiVTS" },
+                    { "AZURE_DEVOPS_AUTH_METHOD", "pat" },
+                    { "AZURE_DEVOPS_PAT", azureDevOpsApiKey },
+                    {"AZURE_DEVOPS_DEFAULT_PROJECT", "TasheerConnectV2" }
+                }
 
-// Create a workflow that connects writer to editor
-Workflow workflow =
-    AgentWorkflowBuilder
-        .BuildSequential([writer, editor]);
+    }));
 
-AIAgent workflowAgent =  workflow.AsAgent();
 
-AgentRunResponse workflowResponse =
-    await workflowAgent.RunAsync("Write a short story about a haunted house.");
+Console.WriteLine("Available tools:");
+IList<McpClientTool> tools = await mcpClient.ListToolsAsync();
+foreach (var tool in tools)
+{
+    Console.WriteLine($"- {tool.Name}: {tool.Description}");
+}
 
-Console.WriteLine(workflowResponse.Text);
+// Initialize agent
 
-[Description("Gets the author of the story.")]
-string GetAuthor() => "Jack Torrance";
 
-[Description("Formats the story for display.")]
-string FormatStory(string title, string author, string story) =>
-    $"Title: {title}\nAuthor: {author}\n\n{story}";
+
+var httpClient = new HttpClient
+{
+    Timeout = TimeSpan.FromMinutes(30), // increase timeout,
+    BaseAddress = new Uri("http://localhost:11434/") // Ollama server address
+
+};
+
+var client = new OllamaApiClient(httpClient, defaultModel: "llama3.1:latest");
+var instructions = """
+                                    You are an Azure DevOps expert. You have access to the following tools to help you with your tasks. Use the tools as needed to answer user questions about Azure DevOps. Be sure to provide clear and concise answers.
+                   """;
+var agent=client.CreateAIAgent(instructions: instructions, tools: tools.Cast<AITool>().ToArray())
+    .AsBuilder()
+    .Build();
+
+AgentThread thread = agent.GetNewThread();
+while (true)
+{
+    Console.Write("> ");
+    string? input = Console.ReadLine();
+    ChatMessage message = new(ChatRole.User, input);
+    AgentRunResponse response = await agent.RunAsync(message, thread);
+
+    Console.WriteLine(response);
+}
+
+
+
