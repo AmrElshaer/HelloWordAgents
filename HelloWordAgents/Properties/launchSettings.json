@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "HelloWordAgents": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "GITHUB_API_KEY": ""
+      }
+    }
+  }
+}

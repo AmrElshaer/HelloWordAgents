@@ -1,7 +1,5 @@
-﻿
-using Microsoft.Agents.AI;
+﻿using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
-using ModelContextProtocol.Client;
 using OllamaSharp;
 var apiKey = Environment.GetEnvironmentVariable("GITHUB_API_KEY");
 if (string.IsNullOrEmpty(apiKey))
@@ -10,70 +8,49 @@ if (string.IsNullOrEmpty(apiKey))
     return;
 }
 
-var mcpClient = await McpClient.CreateAsync(
-    new StdioClientTransport(new()
-    {
-        Name = "GitHub",
-        Command = "npx",
-        Arguments = ["-y", "@modelcontextprotocol/server-github"],
-        EnvironmentVariables = new Dictionary<string, string>(StringComparer.Ordinal)
-                {
-                    { "GITHUB_PERSONAL_ACCESS_TOKEN", apiKey }
-                }
+//var mcpClient = await McpClient.CreateAsync(
+//    new StdioClientTransport(new()
+//    {
+//        Name = "GitHub",
+//        Command = "npx",
+//        Arguments = ["-y", "@modelcontextprotocol/server-github"],
+//        EnvironmentVariables = new Dictionary<string, string>(StringComparer.Ordinal)
+//                {
+//                    { "GITHUB_PERSONAL_ACCESS_TOKEN", apiKey }
+//                }
 
-    }));
+//    }));
 // List all available tools from the MCP server.
-Console.WriteLine("Available tools:");
-IList<McpClientTool> tools = await mcpClient.ListToolsAsync();
+//Console.WriteLine("Available tools:");
+//IList<McpClientTool> tools = await mcpClient.ListToolsAsync();
+//foreach (var tool in  tools)
+//{
+//    Console.WriteLine($"- {tool.Name}: {tool.Description}");
+//}
+
 // Initialize agent
 
-// 🔹 Add your text prompt
-var instructions = """
 
 
-        You are a professional content strategist and visual analyst.
+var httpClient = new HttpClient
+{
+    Timeout = TimeSpan.FromMinutes(30), // increase timeout,
+    BaseAddress = new Uri("http://localhost:11434") // Ollama server address
 
-        You are given several related images. Your task is to:
-        1. Carefully analyze each image for key details, themes, colors, objects, text, diagrams, or visual messages.
-        2. Identify the common narrative or idea that connects all these images.
-        3. Write a powerful and engaging post that:
-           - Clearly explains what the images represent.
-           - Highlights the insights, lessons, or story they convey.
-           - Uses a professional but inspiring tone suitable for LinkedIn or a tech blog.
-           - Includes a concise summary or key takeaway at the end.
-        4. If the images contain technical or architectural diagrams, provide clear interpretations in plain language.
-        5. The post should feel natural, insightful, and add value to professionals in the field.
-        6. Images not give in order so consider this the post more organized and meanfull
-        7. Commit the blog post as a markdown to AmrElshaer/HelloWordAgents with commit message: Blog post published {DateTime.Now:yyyy-MM-dd HH:mm:ss}
+};
 
-        Output format:
-        ---
-        **Title:** [A short, catchy title]
-        **Post:**
-        [Your detailed, well-written post with clear flow and insights]
-        ---
-       
-    """;
-IChatClient client = new OllamaApiClient(new Uri("http://localhost:11434"), "llama3.1:latest");
+var client = new OllamaApiClient(client:httpClient, defaultModel:"llama3.2-vision");
 ChatClientAgent agent = new(client,
-     new ChatClientAgentOptions
-     {
-         Name = "Writer Blogs from images",
-         Instructions = instructions,
-         ChatOptions = new ChatOptions
-         {
-             Tools = [
-               ..tools.Cast<AITool>()
-            ],
-         }
-     }
+    new ChatClientAgentOptions
+    {
+        Instructions = "Extract data from images",
+        //ChatOptions = new ChatOptions
+        //{
+        //    Tools = [..tools.Cast<AITool>()],
+        //}
+    });
 
 
-    );
-
-
-var result = await agent.RunAsync("describe solid principles",cancellationToken:CancellationToken.None);
-Console.WriteLine(result.Text);
 
 // 🔹 Load all image files from "images" folder
 string imageFolder = Path.Combine(Directory.GetCurrentDirectory(), "images");
@@ -94,27 +71,60 @@ if (imageFiles.Count == 0)
     Console.WriteLine("⚠️ No images found in folder.");
     return;
 }
+// convert imageFiles to base64 strings
+var data= new List<string>();
+foreach (var imageFile in imageFiles)
+    {
+    byte[] imageBytes = File.ReadAllBytes(imageFile);
+    string base64String = Convert.ToBase64String(imageBytes);
+    
+    data.Add($"data:image/{Path.GetExtension(imageFile).TrimStart('.')};base64,{base64String}");
+}
 
 Console.WriteLine($"Found {imageFiles.Count} images. Sending to model...");
 
-// 🔹 Read all images and attach them as DataContent
-var contents = imageFiles.Select(file =>
+
+
+
+var systemMessage = new ChatMessage(ChatRole.System, "You are a helpful assistant that extracts data from images.");
+
+var userPrompt = new ChatMessage(ChatRole.User, "Extract the data from the images that user will give you");
+while (true)
 {
-    var bytes = File.ReadAllBytes(file);
-    var mimeType = file.EndsWith(".png") ? "image/png" : "image/jpeg";
-    return new DataContent(bytes, mimeType);
-}).ToList<AIContent>();
+    
+    var imagePath = Console.ReadLine();
+    if (string.IsNullOrEmpty(imagePath))
+    {
+        break;
+    }
+    if (string.IsNullOrEmpty(imagePath)
+        || !File.Exists(imagePath))
+    {
+        Console.WriteLine("❌ Invalid image path. Try again or press Enter to exit.");
+        continue;
+    }
+    var imageBytes = File.ReadAllBytes(imagePath);
+    string base64String = Convert.ToBase64String(imageBytes);
+
+
+    var userImages = new ChatMessage(ChatRole.User, $"image: {base64String}");
+    // 🔹 Run the agent
+    await foreach (var response in agent.RunStreamingAsync([systemMessage, userPrompt, userImages], cancellationToken: CancellationToken.None))
+    {
+        Console.Write(response.Text);
+    }
+    Console.WriteLine(); // New line after response
+
+}
+//var userImages = new ChatMessage(ChatRole.User, $"images: {string.Join(',', data)} ");
 
 
 
 
-// 🔹 Build message
-var message = new ChatMessage(ChatRole.User, contents);
+//// 🔹 Run the agent
+//await foreach(var response in  agent.RunStreamingAsync([systemMessage, userPrompt, userImages],cancellationToken: CancellationToken.None))
+//{
+//    Console.Write(response.Text);
+//}
 
-// 🔹 Run the agent
-var response = await agent.RunAsync(message);
 
-
-
-Console.WriteLine("✅ Model Response:");
-Console.WriteLine(response);
