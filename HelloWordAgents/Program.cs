@@ -1,7 +1,13 @@
-﻿using Microsoft.Agents.AI;
+﻿using Azure;
+using Azure.AI.Inference;
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using ModelContextProtocol.Client;
 using OllamaSharp;
+using OllamaSharp.Models;
+using System.Text;
+using Microsoft.VisualBasic.CompilerServices;
+using ChatRole = Microsoft.Extensions.AI.ChatRole;
 
 var azureDevOpsApiKey = Environment.GetEnvironmentVariable("AZURE_DEVOPS_PAT");
 var mcpClient = await McpClient.CreateAsync(
@@ -29,22 +35,18 @@ foreach (var tool in tools)
 }
 
 // Initialize agent
-
-
-
-var httpClient = new HttpClient
-{
-    Timeout = TimeSpan.FromMinutes(30), // increase timeout,
-    BaseAddress = new Uri("http://localhost:11434/") // Ollama server address
-
-};
-
-var client = new OllamaApiClient(httpClient, defaultModel: "llama3.1:latest");
+var gitHubPatToken = Environment.GetEnvironmentVariable("GITHUB_API_KEY");
+var model = "microsoft/Phi-4-reasoning"; //Example: deepseek/DeepSeek-V3-0324
 var instructions = """
                                     You are an Azure DevOps expert. You have access to the following tools to help you with your tasks. Use the tools as needed to answer user questions about Azure DevOps. Be sure to provide clear and concise answers.
                    """;
-var agent=client.CreateAIAgent(instructions: instructions, tools: tools.Cast<AITool>().ToArray())
+
+var agent = new ChatCompletionsClient(
+    new Uri("https://models.github.ai/inference"),
+    new AzureKeyCredential(gitHubPatToken),
+    new AzureAIInferenceClientOptions()).AsIChatClient(model).CreateAIAgent(instructions: instructions, tools: tools.Cast<AITool>().ToArray())
     .AsBuilder()
+    .Use(FunctionCallMiddleware)
     .Build();
 
 AgentThread thread = agent.GetNewThread();
@@ -58,5 +60,15 @@ while (true)
     Console.WriteLine(response);
 }
 
+async ValueTask<object?> FunctionCallMiddleware(AIAgent callingAgent, FunctionInvocationContext context, Func<FunctionInvocationContext, CancellationToken, ValueTask<object?>> next, CancellationToken cancellationToken)
+{
+    StringBuilder functionCallDetails = new();
+    functionCallDetails.Append($"- Tool Call: '{context.Function.Name}'");
+    if (context.Arguments.Count > 0)
+    {
+        functionCallDetails.Append($" (Args: {string.Join(",", context.Arguments.Select(x => $"[{x.Key} = {x.Value}]"))}");
+    }
 
+    return await next(context, cancellationToken);
+}
 

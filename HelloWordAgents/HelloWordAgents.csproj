@@ -7,8 +7,10 @@
         <Nullable>enable</Nullable>
     </PropertyGroup>
     <ItemGroup>
+		<PackageReference Include="Azure.AI.Inference" Version="1.0.0-beta.5" />
 		<PackageReference Include="Microsoft.Agents.AI.Workflows" Version="*-*" />
 		<PackageReference Include="Microsoft.Agents.AI" Version="*-*" />
+		<PackageReference Include="Microsoft.Extensions.AI.AzureAIInference" Version="10.0.0-preview.1.25559.3" />
 		<PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="9.9.1-preview.1.25474.6" />
 		<PackageReference Include="Azure.AI.OpenAI" Version="2.3.0-beta.2" />
 		<PackageReference Include="ModelContextProtocol" Version="0.4.0-preview.2" />

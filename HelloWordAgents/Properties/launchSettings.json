@@ -3,7 +3,8 @@
     "HelloWordAgents": {
       "commandName": "Project",
       "environmentVariables": {
-        "AZURE_DEVOPS_PAT": ""
+        "AZURE_DEVOPS_PAT": "",
+        "GITHUB_API_KEY": ""
       }
     }
   }
